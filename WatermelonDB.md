@@ -3,8 +3,6 @@
 
 A simple **React Native** project demonstrating how to use **WatermelonDB** with **SQLite** to perform offline CRUD (Create, Read, Update, Delete) operations.
 
----
-
 ## 🧩 Features
 - Offline-first local database using **WatermelonDB**
 - SQLite storage via **react-native-quick-sqlite**
@@ -12,8 +10,7 @@ A simple **React Native** project demonstrating how to use **WatermelonDB** with
 - Real-time UI updates with **@nozbe/with-observables**
 - Babel configuration for decorators
 
----
----
+````
 
 ## ⚙️ 1. Create a New React Native Project
 
