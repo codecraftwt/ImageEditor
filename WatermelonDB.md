@@ -1,5 +1,5 @@
-````markdown
 # 📱 WatermelonDB React Native CRUD Example
+````markdown
 
 A simple **React Native** project demonstrating how to use **WatermelonDB** with **SQLite** to perform offline CRUD (Create, Read, Update, Delete) operations.
 
@@ -13,6 +13,7 @@ A simple **React Native** project demonstrating how to use **WatermelonDB** with
 - Babel configuration for decorators
 
 ---
+---
 
 ## ⚙️ 1. Create a New React Native Project
 
@@ -21,7 +22,7 @@ npx @react-native-community/cli init WatermelonDB
 cd WatermelonDB
 ````
 
----
+
 
 ## 📦 2. Install Required Packages
 
