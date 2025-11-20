@@ -1,3 +1,8 @@
+Here is the complete, updated markdown file with detailed steps for creating `WELCOME_CAMPAIGN_ACTIVITY_ID` via dashboard integrated into your existing guide:
+
+---
+
+```markdown
 # Constant Contact MERN Stack Integration Guide
 
 Complete step-by-step implementation for adding contacts and sending emails via Constant Contact V3 API.
@@ -7,7 +12,7 @@ Complete step-by-step implementation for adding contacts and sending emails via 
 ## **Step 1: Prerequisites & Account Setup**
 
 ### 1.1 Create Developer Account
-1. Go to [Constant Contact Developer Portal](https://developer.constantcontact.com/)
+1. Go to [Constant Contact Developer Portal](https://developer.constantcontact.com/ )
 2. Sign up for a free developer account
 3. Verify your email address
 
@@ -22,7 +27,7 @@ Complete step-by-step implementation for adding contacts and sending emails via 
    - **Client Secret** (click Generate, copy immediately)
 4. Add Redirect URIs:
    - Development: `http://localhost:3001/callback`
-   - Production: `https://yourdomain.com/callback`
+   - Production: `https://yourdomain.com/callback `
 
 **Required Scopes**:
 - `contact_data`
@@ -84,7 +89,7 @@ app.use(express.json());
 const CLIENT_ID = process.env.CONSTANT_CONTACT_CLIENT_ID;
 const CLIENT_SECRET = process.env.CONSTANT_CONTACT_CLIENT_SECRET;
 const REDIRECT_URI = process.env.CONSTANT_CONTACT_REDIRECT_URI;
-const API_URL = "https://api.cc.email/v3";
+const API_URL = "https://api.cc.email/v3 ";
 const DEMO_LIST_NAME = "demo-contact-list";
 const WELCOME_CAMPAIGN_ACTIVITY_ID = process.env.WELCOME_CAMPAIGN_ACTIVITY_ID;
 
@@ -142,7 +147,7 @@ async function getOrCreateList(listName) {
 // --- Step 1: Start OAuth Flow ---
 app.get("/auth", (req, res) => {
   const state = "state_" + Date.now();
-  const authUrl = `https://authz.constantcontact.com/oauth2/default/v1/authorize?client_id=${CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(
+  const authUrl = `https://authz.constantcontact.com/oauth2/default/v1/authorize?client_id= ${CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(
     REDIRECT_URI
   )}&scope=offline_access%20contact_data%20campaign_data%20account_read&state=${state}`;
   
@@ -156,7 +161,7 @@ app.get("/callback", async (req, res) => {
 
   try {
     const tokenResponse = await axios.post(
-      "https://authz.constantcontact.com/oauth2/default/v1/token",
+      "https://authz.constantcontact.com/oauth2/default/v1/token ",
       new URLSearchParams({
         code,
         redirect_uri: REDIRECT_URI,
@@ -198,7 +203,7 @@ async function refreshAccessToken() {
 
   try {
     const response = await axios.post(
-      "https://authz.constantcontact.com/oauth2/default/v1/token",
+      "https://authz.constantcontact.com/oauth2/default/v1/token ",
       new URLSearchParams({
         refresh_token: REFRESH_TOKEN,
         grant_type: "refresh_token",
@@ -401,12 +406,48 @@ app.listen(PORT, () => {
 
 ## **Step 4: Get Campaign Activity IDs**
 
-### **Method 1: Create Campaign via API**
+### **⚠️ CRITICAL: Dashboard vs API Campaigns**
 
-Run this cURL to create a draft campaign:
+**Dashboard-created campaigns CANNOT be used for API sending** due to missing sender fields. However, you can extract `campaign_activity_id` for reference. For production API sending, **always create campaigns via API**.
+
+---
+
+### **Method 1: Create Campaign via Dashboard (For Reference/Testing)**
+
+**Step-by-Step UI Flow:**
+
+1. **Create Campaign**:
+   - Click **"Campaigns"** → **"Create"** → **"Email"**
+   - Choose template → Design welcome email content
+   - **Set sender details** (must match verified email):
+     - **From email**: `your-verified-email@example.com`
+     - **From name**: Your organization name
+     - **Subject**: "Welcome to our platform!"
+
+2. **Save as Draft**:
+   - Click **"Save & Continue"** → **"Save for later"**
+   - **CRITICAL**: Must be in DRAFT status for API use
+
+3. **Extract campaign_activity_id**:
+   - Go to **Campaigns** → **"All campaigns"**
+   - Click **campaign name** (not Edit)
+   - Look at URL: `.../campaigns/ID1/activities/ID2/summary`
+   - Copy **ID2** (the second UUID) = your `campaign_activity_id`
+
+**Example URL**:
+```
+https://app.constantcontact.com/pages/campaigns/abc123/activities/def456-uuid-here/summary
+```
+Your `WELCOME_CAMPAIGN_ACTIVITY_ID` = `def456-uuid-here`
+
+---
+
+### **Method 2: Create Campaign via API (Recommended for Production)**
+
+**Create Welcome Campaign**:
 
 ```bash
-curl --location 'https://api.cc.email/v3/emails' \
+curl --location 'https://api.cc.email/v3/emails ' \
 --header 'Authorization: Bearer YOUR_ACCESS_TOKEN' \
 --header 'Content-Type: application/json' \
 --data '{
@@ -441,43 +482,47 @@ curl --location 'https://api.cc.email/v3/emails' \
 
 ---
 
-### **Method 2: Use Existing Dashboard Campaign**
+### **Method 3: Use Existing Campaign**
 
-1. **Get Campaign ID**: Run `GET /api/emails` to list campaigns
+**Get Campaign ID**:
 ```bash
-curl http://localhost:3001/api/emails
-```
-2. **Get Activity ID**: Use campaign ID from response
-```bash
-curl --location 'https://api.cc.email/v3/emails/YOUR_CAMPAIGN_ID' \
+curl --location 'https://api.cc.email/v3/emails' \
 --header 'Authorization: Bearer YOUR_ACCESS_TOKEN'
 ```
-3. **Copy** the `campaign_activity_id` with `role: "primary_email"`
+
+**Get Activity ID**:
+```bash
+curl --location 'https://api.cc.email/v3/emails/YOUR_CAMPAIGN_ID ' \
+--header 'Authorization: Bearer YOUR_ACCESS_TOKEN'
+```
+
+**Copy** the `campaign_activity_id` with `role: "primary_email"`
 
 ---
 
-### **Method 3: Create Bulk Campaign**
+### **Method 4: Verify Campaign via API (cURL)**
 
+**Check if campaign is API-ready:**
 ```bash
-curl --location 'https://api.cc.email/v3/emails' \
---header 'Authorization: Bearer YOUR_ACCESS_TOKEN' \
---header 'Content-Type: application/json' \
---data '{
-  "name": "Bulk Newsletter Campaign",
-  "type": "NEWSLETTER",
-  "email_campaign_activities": [
-    {
-      "format_type": 5,
-      "from_email": "your-verified-email@example.com",
-      "from_name": "Your Organization",
-      "reply_to_email": "your-verified-email@example.com",
-      "subject": "Monthly Newsletter",
-      "html_content": "<html><body>[[trackingImage]]<h1>News for [[FIRST_NAME]]</h1><p>Your content here.</p></body></html>",
-      "preheader": "Monthly updates"
-    }
-  ]
-}'
+curl --location 'https://api.cc.email/v3/emails/activities/YOUR_CAMPAIGN_ACTIVITY_ID ' \
+--header 'Authorization: Bearer YOUR_ACCESS_TOKEN'
 ```
+
+**Expected Response:**
+```json
+{
+  "campaign_activity_id": "your-id-here",
+  "current_status": "DRAFT",
+  "from_email": "your-verified-email@example.com",
+  "from_name": "Your Organization",
+  "subject": "Welcome to Our Platform"
+}
+```
+
+**Key Checks**:
+- `current_status` must be **"DRAFT"**
+- `from_email` matches your verified sender
+- All fields are populated
 
 ---
 
@@ -577,4 +622,45 @@ email_address: {
 
 ---
 
+## **📋 Summary: Creating All Required Fields**
+
+### **Required Fields Checklist**
+
+| Field | How to Create | Notes |
+|-------|---------------|-------|
+| **CLIENT_ID** | Developer Portal → My Applications | Copy from app settings |
+| **CLIENT_SECRET** | Developer Portal → Generate | Copy immediately, shown once |
+| **ACCESS_TOKEN** | OAuth flow → `/callback` | Logs to console after auth |
+| **REFRESH_TOKEN** | OAuth flow → `/callback` | Logs to console after auth |
+| **FROM_EMAIL** | Constant Contact Account → Verify Email | Must be verified sender |
+| **WELCOME_CAMPAIGN_ACTIVITY_ID** | See Step 4 (API recommended) | Must be DRAFT status |
+| **DEMO_LIST_NAME** | Auto-created in `/api/register` | Or pre-create via dashboard |
+
+### **Quick Command Reference**
+
+```bash
+# Get tokens
+curl http://localhost:3001/auth
+
+# Create campaign via API
+curl --location 'https://api.cc.email/v3/emails ' \
+--header 'Authorization: Bearer YOUR_TOKEN' \
+--header 'Content-Type: application/json' \
+--data '{"name":"Welcome Email","type":"NEWSLETTER","email_campaign_activities":[{"format_type":5,"from_email":"verified@example.com","from_name":"Org","reply_to_email":"verified@example.com","subject":"Welcome","html_content":"<html><body>[[trackingImage]]<h1>Welcome</h1></body></html>"}]}'
+
+# Verify campaign
+curl --location 'https://api.cc.email/v3/emails/activities/YOUR_CAMPAIGN_ACTIVITY_ID ' \
+--header 'Authorization: Bearer YOUR_TOKEN'
+
+# Register user
+curl -X POST http://localhost:3001/api/register \
+  -H "Content-Type: application/json" \
+  -d '{"parentFirst":"Test","parentLast":"User","email":"test@example.com"}'
+```
+
+---
+
 **Your Constant Contact integration is now complete!**
+```
+
+---
