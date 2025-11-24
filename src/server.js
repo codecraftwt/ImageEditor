@@ -40,7 +40,7 @@ app.post('/mailgun-webhook', async (req, res) => {
     console.log("test")
 try {
 // incoming handler will handle reply asynchronously, but respond quickly to Mailgun
-console.log("test the data")
+console.log("test the data test")
 await handleIncomingEmail(req, res);
 } catch (err) {
 console.error('Error handling webhook:', err);
