@@ -24,7 +24,7 @@ cd WatermelonDB
 ## 📦 2. Install Required Packages
 
 ```bash
-npm install @nozbe/watermelondb @nozbe/with-observables react-native-quick-sqlite --legacy-peer-deps
+npm install @nozbe/watermelondb react-native-quick-sqlite --legacy-peer-deps
 ```
 
 ---
