@@ -15,10 +15,11 @@ This guide provides detailed instructions on how to implement AWS S3 cloud stora
 7. [Step 6: Configure Bucket Settings](#step-6-configure-bucket-settings)
 8. [Step 7: Set Up Environment Variables](#step-7-set-up-environment-variables)
 9. [Step 8: Install Dependencies](#step-8-install-dependencies)
-10. [Step 9: Testing the Integration](#step-9-testing-the-integration)
-11. [Troubleshooting](#troubleshooting)
-12. [Cost Optimization](#cost-optimization)
-13. [Security Best Practices](#security-best-practices)
+10. [Step 9: Code Implementation](#step-9-code-implementation)
+11. [Step 10: Testing the Integration](#step-10-testing-the-integration)
+12. [Troubleshooting](#troubleshooting)
+13. [Cost Optimization](#cost-optimization)
+14. [Security Best Practices](#security-best-practices)
 
 ---
 
@@ -560,9 +561,805 @@ You should see the packages listed with their versions.
 
 ---
 
-## Step 9: Testing the Integration
+## Step 9: Code Implementation
 
-### 9.1 Start Your Server
+This section provides complete code examples for implementing AWS S3 in your Node.js application.
+
+### 9.1 Basic S3 Service Setup
+
+Create a new file `Backend/services/s3Service.js`:
+
+```javascript
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import crypto from 'crypto';
+import path from 'path';
+
+// Configuration from environment variables
+const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+const region = process.env.AWS_REGION || 'us-east-1';
+const bucketName = process.env.AWS_S3_BUCKET;
+
+// Initialize S3 Client
+const s3Client = new S3Client({
+  region,
+  credentials: {
+    accessKeyId,
+    secretAccessKey,
+  },
+});
+
+// Base URL for S3 bucket
+const getBucketBaseUrl = () => {
+  if (region === 'us-east-1') {
+    return `https://${bucketName}.s3.amazonaws.com`;
+  }
+  return `https://${bucketName}.s3.${region}.amazonaws.com`;
+};
+
+/**
+ * Upload file to S3
+ * @param {Buffer} fileBuffer - File buffer
+ * @param {string} key - S3 object key (path)
+ * @param {string} contentType - MIME type
+ * @param {Object} metadata - Optional metadata
+ * @returns {Promise<{key: string, location: string}>}
+ */
+export async function uploadFile(fileBuffer, key, contentType, metadata = {}) {
+  try {
+    const command = new PutObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+      Body: fileBuffer,
+      ContentType: contentType,
+      Metadata: {
+        uploadedAt: new Date().toISOString(),
+        ...metadata,
+      },
+      // Keep objects private - use signed URLs for access
+      ACL: 'private',
+    });
+
+    await s3Client.send(command);
+
+    return {
+      key,
+      location: `${getBucketBaseUrl()}/${key}`,
+      s3Url: `s3://${bucketName}/${key}`,
+    };
+  } catch (error) {
+    console.error('Error uploading file to S3:', error);
+    throw new Error(`Failed to upload file: ${error.message}`);
+  }
+}
+
+/**
+ * Generate signed URL for S3 object
+ * @param {string} key - S3 object key
+ * @param {number} expiresIn - Expiration time in seconds (max 604800 = 7 days)
+ * @returns {Promise<string>} Signed URL
+ */
+export async function getSignedUrlForKey(key, expiresIn = 3600) {
+  try {
+    // AWS S3 signed URLs have a maximum expiration of 7 days
+    const maxExpiry = 604800; // 7 days in seconds
+    const actualExpiry = Math.min(expiresIn, maxExpiry);
+
+    const command = new GetObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+    });
+
+    const signedUrl = await getSignedUrl(s3Client, command, {
+      expiresIn: actualExpiry,
+    });
+
+    return signedUrl;
+  } catch (error) {
+    console.error('Error generating signed URL:', error);
+    throw new Error(`Failed to generate signed URL: ${error.message}`);
+  }
+}
+
+/**
+ * Delete file from S3
+ * @param {string} key - S3 object key
+ * @returns {Promise<boolean>} Success status
+ */
+export async function deleteFile(key) {
+  try {
+    const command = new DeleteObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+    });
+
+    await s3Client.send(command);
+    return true;
+  } catch (error) {
+    console.error('Error deleting file from S3:', error);
+    throw new Error(`Failed to delete file: ${error.message}`);
+  }
+}
+
+/**
+ * Check if file exists in S3
+ * @param {string} key - S3 object key
+ * @returns {Promise<boolean>} Exists status
+ */
+export async function fileExists(key) {
+  try {
+    const command = new HeadObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+    });
+
+    await s3Client.send(command);
+    return true;
+  } catch (error) {
+    if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Generate unique file name
+ * @param {string} originalName - Original file name
+ * @returns {string} Unique file name
+ */
+export function generateUniqueFileName(originalName) {
+  const ext = path.extname(originalName);
+  const name = path.basename(originalName, ext);
+  const timestamp = Date.now();
+  const random = crypto.randomBytes(6).toString('hex');
+  return `${name}-${timestamp}-${random}${ext}`;
+}
+
+export { s3Client, bucketName };
+```
+
+### 9.2 File Upload with Multer Integration
+
+Create `Backend/utils/fileUpload.js`:
+
+```javascript
+import multer from 'multer';
+import { uploadFile, generateUniqueFileName } from '../services/s3Service.js';
+import { getMediaType } from './mediaUpload.js'; // Assuming you have this utility
+
+const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE, 10) || 20 * 1024 * 1024; // 20MB
+
+// Configure multer to use memory storage (for S3 uploads)
+const storage = multer.memoryStorage();
+
+// File filter
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf', 'video/mp4'];
+  
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Allowed: images, PDF, videos'), false);
+  }
+};
+
+export const upload = multer({
+  storage,
+  limits: { fileSize: MAX_FILE_SIZE },
+  fileFilter,
+});
+
+/**
+ * Upload file to S3 and return metadata
+ * @param {Object} file - Multer file object
+ * @param {string} folder - S3 folder path (e.g., 'documents', 'chat-media')
+ * @returns {Promise<{key: string, url: string, signedUrl: string, mediaType: string}>}
+ */
+export async function uploadToS3(file, folder = 'uploads') {
+  try {
+    // Generate unique file name
+    const fileName = generateUniqueFileName(file.originalname);
+    const key = `${folder}/${fileName}`;
+
+    // Upload to S3
+    const uploadResult = await uploadFile(
+      file.buffer,
+      key,
+      file.mimetype,
+      {
+        originalName: file.originalname,
+        uploadedBy: file.userId || 'unknown',
+      }
+    );
+
+    // Generate signed URL (7 days expiration)
+    const signedUrl = await getSignedUrlForKey(key, 604800);
+
+    // Determine media type
+    const mediaType = getMediaType(file.mimetype) || 'unknown';
+
+    return {
+      key: uploadResult.key,
+      url: uploadResult.location,
+      signedUrl,
+      s3Url: uploadResult.s3Url,
+      mediaType,
+      originalName: file.originalname,
+      size: file.size,
+    };
+  } catch (error) {
+    console.error('Error in uploadToS3:', error);
+    throw error;
+  }
+}
+```
+
+### 9.3 Database Integration - PostgreSQL
+
+#### 9.3.1 Database Schema
+
+Create migration file `Backend/migrations/add_s3_support.sql`:
+
+```sql
+-- Add S3 support columns to messages table
+ALTER TABLE messages 
+ADD COLUMN IF NOT EXISTS s3_key TEXT,
+ADD COLUMN IF NOT EXISTS s3_url TEXT;
+
+-- Add index for faster S3 key lookups
+CREATE INDEX IF NOT EXISTS idx_messages_s3_key ON messages(s3_key) WHERE s3_key IS NOT NULL;
+
+-- Add S3 support to documents table
+ALTER TABLE documents
+ADD COLUMN IF NOT EXISTS s3_key TEXT,
+ADD COLUMN IF NOT EXISTS s3_location TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_documents_s3_key ON documents(s3_key) WHERE s3_key IS NOT NULL;
+
+-- Add S3 support to session_artifacts (for recordings)
+-- Note: recording_url can store s3:// URLs
+COMMENT ON COLUMN session_artifacts.recording_url IS 'Recording URL (can be S3 URL: s3://bucket/key)';
+```
+
+#### 9.3.2 PostgreSQL Model Example
+
+Create `Backend/models/fileModel.js`:
+
+```javascript
+import { pool } from '../config/db.js';
+
+/**
+ * Save file metadata to database (PostgreSQL)
+ * @param {Object} fileData - File metadata
+ * @returns {Promise<Object>} Saved file record
+ */
+export async function saveFileMetadata({
+  userId,
+  fileName,
+  originalName,
+  s3Key,
+  s3Url,
+  signedUrl,
+  mediaType,
+  size,
+  folder = 'uploads',
+}) {
+  const query = `
+    INSERT INTO files (
+      user_id, 
+      file_name, 
+      original_name, 
+      s3_key, 
+      s3_url, 
+      signed_url, 
+      media_type, 
+      size, 
+      folder, 
+      created_at
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+    RETURNING *
+  `;
+
+  const values = [
+    userId,
+    fileName,
+    originalName,
+    s3Key,
+    s3Url,
+    signedUrl,
+    mediaType,
+    size,
+    folder,
+  ];
+
+  const { rows } = await pool.query(query, values);
+  return rows[0];
+}
+
+/**
+ * Get file by S3 key
+ * @param {string} s3Key - S3 object key
+ * @returns {Promise<Object|null>} File record
+ */
+export async function getFileByS3Key(s3Key) {
+  const query = `
+    SELECT * FROM files 
+    WHERE s3_key = $1
+    LIMIT 1
+  `;
+
+  const { rows } = await pool.query(query, [s3Key]);
+  return rows[0] || null;
+}
+
+/**
+ * Update signed URL for a file (when regenerating expired URLs)
+ * @param {string} s3Key - S3 object key
+ * @param {string} newSignedUrl - New signed URL
+ * @returns {Promise<Object>} Updated file record
+ */
+export async function updateSignedUrl(s3Key, newSignedUrl) {
+  const query = `
+    UPDATE files 
+    SET signed_url = $1, updated_at = NOW()
+    WHERE s3_key = $2
+    RETURNING *
+  `;
+
+  const { rows } = await pool.query(query, [newSignedUrl, s3Key]);
+  return rows[0];
+}
+
+/**
+ * Delete file record from database
+ * @param {string} s3Key - S3 object key
+ * @returns {Promise<boolean>} Success status
+ */
+export async function deleteFileMetadata(s3Key) {
+  const query = `
+    DELETE FROM files 
+    WHERE s3_key = $1
+    RETURNING id
+  `;
+
+  const { rows } = await pool.query(query, [s3Key]);
+  return rows.length > 0;
+}
+```
+
+### 9.4 Database Integration - MongoDB
+
+If you're using MongoDB instead of PostgreSQL:
+
+```javascript
+import mongoose from 'mongoose';
+
+// Define File Schema
+const fileSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  },
+  fileName: {
+    type: String,
+    required: true,
+  },
+  originalName: {
+    type: String,
+    required: true,
+  },
+  s3Key: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true,
+  },
+  s3Url: {
+    type: String,
+    required: true,
+  },
+  signedUrl: {
+    type: String,
+    required: true,
+  },
+  mediaType: {
+    type: String,
+    enum: ['image', 'pdf', 'video', 'document'],
+  },
+  size: {
+    type: Number,
+    required: true,
+  },
+  folder: {
+    type: String,
+    default: 'uploads',
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
+// Create model
+const File = mongoose.model('File', fileSchema);
+
+/**
+ * Save file metadata to MongoDB
+ */
+export async function saveFileMetadata(fileData) {
+  const file = new File(fileData);
+  return await file.save();
+}
+
+/**
+ * Get file by S3 key
+ */
+export async function getFileByS3Key(s3Key) {
+  return await File.findOne({ s3Key });
+}
+
+/**
+ * Update signed URL
+ */
+export async function updateSignedUrl(s3Key, newSignedUrl) {
+  return await File.findOneAndUpdate(
+    { s3Key },
+    { signedUrl: newSignedUrl, updatedAt: new Date() },
+    { new: true }
+  );
+}
+
+/**
+ * Delete file metadata
+ */
+export async function deleteFileMetadata(s3Key) {
+  return await File.findOneAndDelete({ s3Key });
+}
+```
+
+### 9.5 Express Route Example
+
+Create `Backend/routes/fileRoutes.js`:
+
+```javascript
+import express from 'express';
+import { upload } from '../utils/fileUpload.js';
+import { uploadToS3 } from '../utils/fileUpload.js';
+import { getSignedUrlForKey, deleteFile } from '../services/s3Service.js';
+import { saveFileMetadata, getFileByS3Key, updateSignedUrl, deleteFileMetadata } from '../models/fileModel.js';
+import { authRequired } from '../middleware/authMiddleware.js';
+
+const router = express.Router();
+
+/**
+ * POST /api/files/upload
+ * Upload a file to S3
+ */
+router.post('/upload', authRequired, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file provided' });
+    }
+
+    // Determine folder based on request or default
+    const folder = req.body.folder || 'uploads';
+    
+    // Upload to S3
+    const uploadResult = await uploadToS3(req.file, folder);
+
+    // Save metadata to database
+    const fileRecord = await saveFileMetadata({
+      userId: req.user.id,
+      fileName: uploadResult.key.split('/').pop(),
+      originalName: req.file.originalname,
+      s3Key: uploadResult.key,
+      s3Url: uploadResult.s3Url,
+      signedUrl: uploadResult.signedUrl,
+      mediaType: uploadResult.mediaType,
+      size: req.file.size,
+      folder,
+    });
+
+    res.status(201).json({
+      success: true,
+      file: {
+        id: fileRecord.id,
+        key: uploadResult.key,
+        signedUrl: uploadResult.signedUrl,
+        mediaType: uploadResult.mediaType,
+        size: uploadResult.size,
+      },
+    });
+  } catch (error) {
+    console.error('File upload error:', error);
+    res.status(500).json({
+      error: 'Failed to upload file',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/files/:fileId/url
+ * Get signed URL for a file (regenerate if expired)
+ */
+router.get('/:fileId/url', authRequired, async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const expiresIn = parseInt(req.query.expiresIn, 10) || 3600;
+
+    // Get file from database
+    const file = await getFileByS3Key(fileId); // Assuming fileId is s3Key
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Check if user has access (add your authorization logic here)
+    // if (file.userId !== req.user.id && req.user.role !== 'admin') {
+    //   return res.status(403).json({ error: 'Access denied' });
+    // }
+
+    // Generate new signed URL
+    const signedUrl = await getSignedUrlForKey(file.s3Key, expiresIn);
+
+    // Update database with new signed URL
+    await updateSignedUrl(file.s3Key, signedUrl);
+
+    res.json({
+      success: true,
+      signedUrl,
+      expiresIn,
+    });
+  } catch (error) {
+    console.error('Error getting signed URL:', error);
+    res.status(500).json({
+      error: 'Failed to generate signed URL',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * DELETE /api/files/:fileId
+ * Delete a file from S3 and database
+ */
+router.delete('/:fileId', authRequired, async (req, res) => {
+  try {
+    const { fileId } = req.params;
+
+    // Get file from database
+    const file = await getFileByS3Key(fileId);
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Check authorization
+    // if (file.userId !== req.user.id && req.user.role !== 'admin') {
+    //   return res.status(403).json({ error: 'Access denied' });
+    // }
+
+    // Delete from S3
+    await deleteFile(file.s3Key);
+
+    // Delete from database
+    await deleteFileMetadata(file.s3Key);
+
+    res.json({
+      success: true,
+      message: 'File deleted successfully',
+    });
+  } catch (error) {
+    console.error('Error deleting file:', error);
+    res.status(500).json({
+      error: 'Failed to delete file',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/files/:fileId
+ * Get file metadata
+ */
+router.get('/:fileId', authRequired, async (req, res) => {
+  try {
+    const { fileId } = req.params;
+
+    const file = await getFileByS3Key(fileId);
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Generate fresh signed URL
+    const signedUrl = await getSignedUrlForKey(file.s3Key, 3600);
+
+    res.json({
+      success: true,
+      file: {
+        ...file,
+        signedUrl, // Include fresh signed URL
+      },
+    });
+  } catch (error) {
+    console.error('Error getting file:', error);
+    res.status(500).json({
+      error: 'Failed to get file',
+      message: error.message,
+    });
+  }
+});
+
+export default router;
+```
+
+### 9.6 Complete Example: Chat Media Upload
+
+Example for chat messages with media:
+
+```javascript
+// Backend/controllers/messageController.js
+import { uploadSingle } from '../utils/mediaUpload.js';
+import { uploadMedia, getMediaSignedUrl } from '../utils/mediaUpload.js';
+import { saveMessage } from '../models/messagingModel.js';
+
+export async function sendMessageWithMedia(req, res) {
+  try {
+    const { conversationId, messageText } = req.body;
+    const senderId = req.user.id;
+
+    let mediaUrl = null;
+    let mediaType = null;
+    let s3Key = null;
+
+    // Handle file upload if present
+    if (req.file) {
+      const uploadResult = await uploadMedia(req.file);
+      
+      mediaUrl = uploadResult.url;
+      mediaType = uploadResult.mediaType;
+      s3Key = uploadResult.key; // Store S3 key for regenerating signed URLs
+    }
+
+    // Save message to database
+    const message = await saveMessage(
+      conversationId,
+      senderId,
+      req.body.receiverId,
+      messageText,
+      mediaUrl,
+      mediaType,
+      s3Key // Store S3 key in database
+    );
+
+    res.status(201).json({
+      success: true,
+      message: {
+        ...message,
+        mediaUrl: mediaUrl ? await getMediaSignedUrl(s3Key) : null, // Return signed URL
+      },
+    });
+  } catch (error) {
+    console.error('Error sending message:', error);
+    res.status(500).json({
+      error: 'Failed to send message',
+      message: error.message,
+    });
+  }
+}
+```
+
+### 9.7 Error Handling Middleware
+
+Add to your Express app:
+
+```javascript
+// Backend/middleware/errorHandler.js
+export function s3ErrorHandler(error, req, res, next) {
+  if (error.name === 'NoSuchBucket') {
+    return res.status(404).json({
+      error: 'S3 bucket not found',
+      message: 'The specified S3 bucket does not exist. Please check your configuration.',
+    });
+  }
+
+  if (error.name === 'AccessDenied') {
+    return res.status(403).json({
+      error: 'Access denied',
+      message: 'You do not have permission to access this resource.',
+    });
+  }
+
+  if (error.name === 'InvalidAccessKeyId') {
+    return res.status(401).json({
+      error: 'Invalid AWS credentials',
+      message: 'The AWS access key ID is invalid. Please check your configuration.',
+    });
+  }
+
+  if (error.name === 'SignatureDoesNotMatch') {
+    return res.status(401).json({
+      error: 'Invalid AWS signature',
+      message: 'The AWS secret access key is invalid. Please check your configuration.',
+    });
+  }
+
+  // Pass to default error handler
+  next(error);
+}
+```
+
+### 9.8 Usage in Server
+
+Add to `Backend/server.js`:
+
+```javascript
+import fileRoutes from './routes/fileRoutes.js';
+import { s3ErrorHandler } from './middleware/errorHandler.js';
+
+// ... other imports
+
+// Add routes
+app.use('/api/files', fileRoutes);
+
+// Add error handler
+app.use(s3ErrorHandler);
+```
+
+### 9.9 Testing the Implementation
+
+Create a test script `Backend/scripts/testS3.js`:
+
+```javascript
+import { uploadFile, getSignedUrlForKey, deleteFile } from '../services/s3Service.js';
+import fs from 'fs';
+
+async function testS3() {
+  try {
+    console.log('Testing S3 upload...');
+    
+    // Read a test file
+    const fileBuffer = fs.readFileSync('./test-file.pdf');
+    const key = `test/test-${Date.now()}.pdf`;
+
+    // Upload
+    const uploadResult = await uploadFile(fileBuffer, key, 'application/pdf');
+    console.log('✅ Upload successful:', uploadResult);
+
+    // Get signed URL
+    const signedUrl = await getSignedUrlForKey(key, 3600);
+    console.log('✅ Signed URL generated:', signedUrl);
+
+    // Delete
+    await deleteFile(key);
+    console.log('✅ File deleted');
+
+    console.log('✅ All tests passed!');
+  } catch (error) {
+    console.error('❌ Test failed:', error);
+  }
+}
+
+testS3();
+```
+
+Run the test:
+```bash
+node Backend/scripts/testS3.js
+```
+
+---
+
+## Step 10: Testing the Integration
+
+### 10.1 Start Your Server
 
 1. Make sure your backend server is running:
    ```bash
@@ -576,7 +1373,7 @@ You should see the packages listed with their versions.
    S3 bucket top-tutors-documents-prod is accessible
    ```
 
-### 9.2 Test File Upload
+### 10.2 Test File Upload
 
 #### Option A: Test via API Endpoint
 
@@ -594,7 +1391,7 @@ curl -X POST http://localhost:4000/api/your-upload-endpoint \
 3. Upload a test file
 4. Check that the file appears in your S3 bucket
 
-### 9.3 Verify Files in S3
+### 10.3 Verify Files in S3
 
 1. Go to AWS Console → S3
 2. Click on your bucket
@@ -604,7 +1401,7 @@ curl -X POST http://localhost:4000/api/your-upload-endpoint \
    - `recordings/` for Zoom recordings
 4. You should see your uploaded files
 
-### 9.4 Test Signed URL Generation
+### 10.4 Test Signed URL Generation
 
 The application generates signed URLs for secure file access. Test this:
 
@@ -616,7 +1413,7 @@ curl -X GET http://localhost:4000/api/media/signed-url?key=chat-media/filename.j
 
 You should receive a signed URL that works for accessing the file.
 
-### 9.5 Test Recording Upload (If Using Zoom Integration)
+### 10.5 Test Recording Upload (If Using Zoom Integration)
 
 1. Create a Zoom meeting with recording enabled
 2. Record and end the meeting
