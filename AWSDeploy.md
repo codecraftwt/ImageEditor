@@ -103,6 +103,7 @@ cd Frontend
 ### **Step 5: Build frontend**
 
 ```bash
+npm install
 npm run build
 cd ..
 ```
