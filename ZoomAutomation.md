@@ -1,620 +1,1121 @@
-# Zoom Integration Guide - Step by Step Implementation
+# Zoom Automation Implementation Guide
 
-This guide provides detailed instructions on how to implement Zoom automation in the Top Tutors Connect project. It covers everything from creating Zoom API credentials to configuring webhooks and testing the integration.
+This comprehensive guide covers all steps needed to implement Zoom integration in the Top Tutors Connect platform, including both Zoom Marketplace Dashboard configuration and code implementation.
 
 ---
 
 ## Table of Contents
 
-1. [Prerequisites](#prerequisites)
-2. [Step 1: Create a Zoom App](#step-1-create-a-zoom-app)
-3. [Step 2: Configure OAuth Scopes](#step-2-configure-oauth-scopes)
-4. [Step 3: Get API Credentials](#step-3-get-api-credentials)
-5. [Step 4: Configure Webhooks](#step-4-configure-webhooks)
-6. [Step 5: Set Up Environment Variables](#step-5-set-up-environment-variables)
-7. [Step 6: Database Setup](#step-6-database-setup)
-8. [Step 7: Testing the Integration](#step-7-testing-the-integration)
-9. [Troubleshooting](#troubleshooting)
-10. [API Endpoints Reference](#api-endpoints-reference)
+1. [Zoom Marketplace Dashboard Setup](#1-zoom-marketplace-dashboard-setup)
+2. [Environment Variables Configuration](#2-environment-variables-configuration)
+3. [Code Implementation](#3-code-implementation)
+4. [Database Schema](#4-database-schema)
+5. [Testing & Verification](#5-testing--verification)
+6. [Troubleshooting](#6-troubleshooting)
 
 ---
 
-## Prerequisites
+## 1. Zoom Marketplace Dashboard Setup
 
-Before starting, ensure you have:
-
-- A Zoom account (Pro, Business, or Enterprise plan recommended)
-- Admin access to your Zoom account
-- Access to your project's backend environment
-- A publicly accessible server URL for webhooks (not localhost)
-- Node.js and npm installed
-- PostgreSQL database set up
-
----
-
-## Step 1: Create a Zoom App
-
-### 1.1 Access Zoom Marketplace
+### Step 1: Sign In to Zoom Marketplace
 
 1. Go to [Zoom Marketplace](https://marketplace.zoom.us/)
-2. Sign in with your Zoom account
-3. Click on **"Develop"** → **"Build App"** in the top navigation
+2. Click **"Sign In"** in the top right corner
+3. Sign in with your Zoom account credentials
+   - **Note**: You need a Zoom account with admin privileges or the ability to create apps
 
-### 1.2 Create Server-to-Server OAuth App
+### Step 2: Create App
 
-1. Click **"Create"** button
-2. Select **"Server-to-Server OAuth"** as the app type
-3. Fill in the app information:
+1. After signing in, click **"Develop"** → **"Build App"** in the top navigation
+2. Click **"Create"** button
+3. Select **"Server-to-Server OAuth"** app type
+   - This is the recommended type for backend integrations
+   - It allows your application to make API calls on behalf of your Zoom account
+4. Fill in the app information:
    - **App Name**: `Top Tutors Connect` (or your preferred name)
    - **Company Name**: Your company name
-   - **Developer Contact Information**: Your email address
-   - **App Description**: Brief description of your app's purpose
-   - **Company Website**: Your website URL
+   - **Developer Email**: Your email address
+   - **App Description**: Brief description of your app
+5. Click **"Create"** to proceed
 
-4. Click **"Create"** to proceed
+### Step 3: Create OAuth Credentials
 
-### 1.3 App Credentials
+After creating the app, you'll be taken to the app's configuration page. Here you need to:
 
-After creating the app, you'll be taken to the app's information page. **Keep this page open** - you'll need the credentials in the next steps.
+#### 3.1 Get Account ID
 
----
+1. In the **"App Credentials"** section, you'll see:
+   - **Account ID** (this is your `ZOOM_ACCOUNT_ID`)
+   - Copy this value - you'll need it for environment variables
 
-## Step 2: Configure OAuth Scopes
+#### 3.2 Create OAuth Client
 
-### 2.1 Navigate to Scopes
+1. Scroll down to **"App Credentials"** section
+2. You'll see:
+   - **Client ID** (this is your `ZOOM_CLIENT_ID`)
+   - **Client Secret** (this is your `ZOOM_CLIENT_SECRET`)
+3. **Important**: The Client Secret is only shown once. Copy it immediately and store it securely.
+4. If you missed it, you can regenerate it, but the old one will stop working.
 
-1. In your Zoom app dashboard, click on **"Scopes"** in the left sidebar
-2. You'll see a list of available scopes
+#### 3.3 Required Scopes
 
-### 2.2 Add Required Scopes
+Navigate to **"Scopes"** tab and add the following scopes:
 
-Add the following scopes by checking the boxes next to them:
-
-#### Meeting Scopes (Required):
+**Meeting Scopes:**
 - ✅ `meeting:write:meeting` - Create and manage meetings
-- ✅ `meeting:read:meeting` - View meeting details
-- ✅ `meeting:read:participant:admin` - View meeting participants (for attendance tracking)
+- ✅ `meeting:read:meeting` - Read meeting information
+- ✅ `meeting:write:registrant` - Register participants to meetings
+- ✅ `meeting:read:registrant` - Read registration information
 
-#### Recording Scopes (Required for Recording Features):
-- ✅ `cloud_recording:read:recording:admin` - Access meeting recordings
+**Recording Scopes:**
+- ✅ `recording:read:recording` - Read recording information
+- ✅ `recording:read:recording:admin` - Admin access to recordings
 
-#### Optional Scopes (Recommended):
-- ✅ `meeting:read:chat_message:admin` - Access chat messages (for chat transcript import)
-- ✅ `user:read:admin` - Read user information (if needed)
+**Webhook Scopes:**
+- ✅ `webinar:read:webinar` (if using webinars)
+- ✅ `meeting:read:participant` - Read participant information
 
-### 2.3 Save Scopes
+**Chat Scopes (Optional but Recommended):**
+- ✅ `meeting:read:chat_message` - Read chat messages from meetings
 
-1. Click **"Save"** at the bottom of the page
-2. You may be prompted to activate the app - click **"Activate"** if prompted
+After adding scopes, click **"Save"** and then **"Activate"** your app.
 
-**Important**: Some scopes require Zoom's approval. You may need to submit your app for review if you're using admin-level scopes.
+### Step 4: Configure Webhook
 
----
+1. Navigate to **"Feature"** tab in your app configuration
+2. Scroll to **"Event Subscriptions"** section
+3. Click **"Add Event Subscription"**
+4. Fill in the webhook configuration:
 
-## Step 3: Get API Credentials
-
-### 3.1 Access App Credentials
-
-1. In your Zoom app dashboard, click on **"App Credentials"** in the left sidebar
-2. You'll see three important values:
-
-### 3.2 Copy Credentials
-
-Copy the following values (you'll add them to your environment variables):
-
-1. **Account ID** (`ZOOM_ACCOUNT_ID`)
-   - Found in the "Account ID" field
-   - Format: Usually a long alphanumeric string
-
-2. **Client ID** (`ZOOM_CLIENT_ID`)
-   - Found in the "Client ID" field
-   - Format: Usually a long alphanumeric string
-
-3. **Client Secret** (`ZOOM_CLIENT_SECRET`)
-   - Found in the "Client Secret" field
-   - Click **"Show"** to reveal it
-   - **⚠️ Keep this secret secure - never commit it to version control**
-
-### 3.3 Legacy JWT Credentials (Optional - Fallback)
-
-If you need to use the legacy JWT authentication method (for backward compatibility):
-
-1. Go to **"JWT"** in the left sidebar (if available)
-2. Copy:
-   - **API Key** (`ZOOM_API_KEY`)
-   - **API Secret** (`ZOOM_API_SECRET`)
-
-**Note**: The project uses Server-to-Server OAuth by default, but JWT credentials serve as a fallback.
-
----
-
-## Step 4: Configure Webhooks
-
-### 4.1 Navigate to Webhooks
-
-1. In your Zoom app dashboard, click on **"Webhooks"** in the left sidebar
-2. Click **"Add Webhook"** or **"Add Event Subscription"**
-
-### 4.2 Configure Webhook URL
-
-1. **Webhook URL**: Enter your public server URL
+   **Subscription Name**: `Top Tutors Webhooks`
+   
+   **Event notification endpoint URL**: 
    ```
    https://your-domain.com/api/zoom/webhook
    ```
-   - Replace `your-domain.com` with your actual domain
-   - The endpoint `/api/zoom/webhook` is already configured in the codebase
+   - Replace `your-domain.com` with your actual production domain
+   - For local testing, use a tunneling service like ngrok: `https://your-ngrok-url.ngrok.io/api/zoom/webhook`
 
-2. **Verification URL** (if separate field):
-   ```
-   https://your-domain.com/api/zoom/webhook/verify
-   ```
+5. **Subscribe to event types** - Select the following events:
 
-### 4.3 Subscribe to Events
+   **Meeting Events:**
+   - ✅ `meeting.started` - Meeting has started
+   - ✅ `meeting.ended` - Meeting has ended
+   - ✅ `meeting.participant_joined` - Participant joined meeting
+   - ✅ `meeting.participant_left` - Participant left meeting
 
-Subscribe to the following events by checking the boxes:
+   **Recording Events:**
+   - ✅ `recording.completed` - Recording has completed processing
+   - ✅ `recording.transcript_completed` - Transcript has been generated
 
-#### Meeting Events:
-- ✅ **Meeting started** (`meeting.started`)
-- ✅ **Participant joined meeting** (`meeting.participant_joined`)
-- ✅ **Participant left meeting** (`meeting.participant_left`)
-- ✅ **Meeting ended** (`meeting.ended`)
+   **Optional Events:**
+   - ⚠️ `meeting.chat_message_sent` - Chat message sent (if chat tracking is needed)
 
-#### Recording Events:
-- ✅ **All Recordings have completed** (`recording.completed`)
+6. Click **"Save"** to save the webhook configuration
 
-#### Optional Events:
-- ⚠️ **In-meeting chat message received** (`meeting.chat_message`)
+### Step 5: Generate Webhook Secret Token
 
-### 4.4 Webhook Secret Token
+1. In the **"Event Subscriptions"** section, you'll see a **"Verification Token"** field
+2. Click **"Generate"** or **"Edit"** to set a custom token
+3. **Important**: This token must be:
+   - At least 8 characters long
+   - Stored securely (this is your `ZOOM_WEBHOOK_SECRET_TOKEN`)
+   - Never exposed in client-side code
+4. Copy this token - you'll need it for environment variables
+5. Click **"Save"** to save the token
 
-1. **Webhook Secret Token**: Generate a secure random string
-   - You can use an online generator or run:
-     ```bash
-     node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-     ```
-   - Copy this token - you'll add it to your environment variables as `ZOOM_WEBHOOK_SECRET_TOKEN`
-   - **⚠️ Keep this secret secure**
+### Step 6: Activate Your App
 
-2. Paste the token into the **"Secret Token"** field in Zoom
-
-3. Click **"Save"** or **"Add"**
-
-### 4.5 Verify Webhook
-
-After saving, Zoom will immediately send a validation request to your webhook URL. The endpoint should respond with:
-```json
-{
-  "plainToken": "...",
-  "encryptedToken": "..."
-}
-```
-
-If you see an error, check:
-- Your server is running and accessible
-- The webhook URL is correct
-- The `ZOOM_WEBHOOK_SECRET_TOKEN` environment variable is set correctly
+1. After configuring all settings, go to **"Activation"** tab
+2. Review the activation status
+3. Click **"Activate"** to activate your app
+4. You may need to accept Zoom's terms and conditions
+5. Once activated, your app is ready to use
 
 ---
 
-## Step 5: Set Up Environment Variables
+## 2. Environment Variables Configuration
 
-### 5.1 Locate Your .env File
+### Step 7: Add Environment Variables to Your Project
 
-Navigate to your backend directory and open or create the `.env` file:
-```bash
-cd Backend
-nano .env  # or use your preferred editor
-```
-
-### 5.2 Add Zoom Environment Variables
-
-Add the following variables to your `.env` file:
+Add the following environment variables to your `.env` file (or your deployment environment):
 
 ```env
-# ============================================
-# ZOOM INTEGRATION CONFIGURATION
-# ============================================
-
-# Server-to-Server OAuth (Primary Method)
+# Zoom OAuth Credentials (from Step 3)
 ZOOM_ACCOUNT_ID=your_account_id_here
 ZOOM_CLIENT_ID=your_client_id_here
 ZOOM_CLIENT_SECRET=your_client_secret_here
 
-# Legacy JWT (Fallback - Optional)
+# Zoom Webhook Configuration (from Step 5)
+ZOOM_WEBHOOK_SECRET_TOKEN=your_webhook_secret_token_here
+
+# Zoom Registration Feature (Optional - defaults to enabled)
+USE_ZOOM_REGISTRATION=true
+
+# Legacy JWT Credentials (Optional - for backward compatibility)
+# Only needed if you're using JWT authentication instead of OAuth
 ZOOM_API_KEY=your_api_key_here
 ZOOM_API_SECRET=your_api_secret_here
 
-# Webhook Configuration
-ZOOM_WEBHOOK_SECRET_TOKEN=your_webhook_secret_token_here
-
-# Mock Mode (for development/testing)
-# Set to 'true' to use mock Zoom service instead of real API
+# Mock Zoom Service (for development/testing)
+# Set to 'true' to use mock service instead of real Zoom API
 USE_MOCK_ZOOM=false
 ```
 
-### 5.3 Replace Placeholder Values
+### Step 8: Verify Environment Variables
 
-Replace the placeholder values with the actual credentials you copied:
-
-1. `your_account_id_here` → Your Zoom Account ID
-2. `your_client_id_here` → Your Zoom Client ID
-3. `your_client_secret_here` → Your Zoom Client Secret
-4. `your_api_key_here` → Your Zoom API Key (if using JWT fallback)
-5. `your_api_secret_here` → Your Zoom API Secret (if using JWT fallback)
-6. `your_webhook_secret_token_here` → Your Webhook Secret Token
-
-### 5.4 Security Best Practices
-
-- ✅ **Never commit `.env` files to version control**
-- ✅ Add `.env` to your `.gitignore` file
-- ✅ Use different credentials for development and production
-- ✅ Rotate secrets periodically
-- ✅ Use environment variable management tools in production (AWS Secrets Manager, Azure Key Vault, etc.)
-
----
-
-## Step 6: Database Setup
-
-### 6.1 Verify Database Schema
-
-The Zoom integration requires the following database columns. These should already be set up, but verify:
-
-#### Sessions Table:
-- `zoom_link` (TEXT) - Stores the Zoom meeting join URL
-- `zoom_meeting_id` (VARCHAR(255)) - Stores the Zoom meeting ID
-
-#### Session Artifacts Table:
-- `tutor_join_time` (TIMESTAMP) - When tutor joined the meeting
-- `student_join_time` (TIMESTAMP) - When student(s) joined
-- `student_end_time` (TIMESTAMP) - When student(s) left
-- `recording_url` (TEXT) - URL to the meeting recording
-- `duration` (INTEGER) - Actual meeting duration in seconds
-
-### 6.2 Run Database Migrations
-
-If the columns don't exist, the application will attempt to create them automatically on startup. However, you can also run migrations manually:
+After adding the environment variables, restart your server and verify they're loaded:
 
 ```bash
-cd Backend
-npm run migrate  # If you have a migration script
+# Check if variables are loaded (in your server logs)
+# You should see: "🔧 [ZOOM SERVICE] Using REAL Zoom service"
 ```
-
-Or check the `Backend/config/db.js` file for automatic schema creation.
 
 ---
 
-## Step 7: Testing the Integration
+## 3. Code Implementation
 
-### 7.1 Start Your Server
+### Step 9: Create Meeting in Code
 
-1. Make sure your backend server is running:
+The meeting creation is already implemented in the codebase. Here's how it works:
+
+#### 9.1 Meeting Creation Service
+
+**File**: `Backend/services/realZoomService.js`
+
+The service uses Server-to-Server OAuth to authenticate and create meetings:
+
+```javascript
+// OAuth token is automatically obtained
+async createMeeting({ topic, start_time, duration, timezone, agenda, settings = {} }) {
+  // Automatically gets OAuth token
+  // Creates meeting via Zoom API
+  // Returns meeting details including meeting ID and join URLs
+}
+```
+
+#### 9.2 Create Meeting for Session
+
+**File**: `Backend/services/zoomService.js`
+
+When creating a meeting for a session:
+
+```javascript
+async createSessionMeeting(session) {
+  // Creates Zoom meeting
+  // Registers participants (if enabled)
+  // Stores meeting link in database
+  // Returns meeting details
+}
+```
+
+#### 9.3 API Endpoint
+
+**File**: `Backend/routes/zoomRoutes.js`
+
+```javascript
+POST /api/zoom/sessions/:sessionId/meeting
+```
+
+**Usage Example:**
+```javascript
+// Frontend call
+const response = await api.post(`/zoom/sessions/${sessionId}/meeting`);
+// Returns: { success: true, meeting: {...}, sessionId: ... }
+```
+
+### Step 10: Add Registration Process with Email
+
+Registration is automatically handled when creating meetings (if `USE_ZOOM_REGISTRATION=true`).
+
+#### 10.1 Registration Flow
+
+**File**: `Backend/services/zoomService.js` → `createSessionMeeting()`
+
+1. Meeting is created with `registration_type: 2` (required registration)
+2. For each student in the pod:
+   - Student is registered via Zoom API
+   - Registration data is stored in database
+   - Unique join URL is generated for each student
+
+#### 10.2 Registration Service
+
+**File**: `Backend/services/realZoomService.js`
+
+```javascript
+async registerParticipantToZoom(meetingId, email, firstName, lastName) {
+  // Registers participant to Zoom meeting
+  // Returns: { registrantId, participantUUID, joinUrl, email }
+}
+```
+
+#### 10.3 Manual Registration Endpoint
+
+If you need to register participants after meeting creation:
+
+```javascript
+POST /api/zoom/sessions/:sessionId/register-participants
+```
+
+This endpoint:
+- Gets all students in the session's pod
+- Registers each student to the Zoom meeting
+- Stores registration data in database
+- Returns registration results
+
+### Step 11: Store Meeting Link in Database
+
+Meeting links are automatically stored when creating meetings.
+
+#### 11.1 Database Storage
+
+**File**: `Backend/models/sessionModel.js`
+
+The `updateSession()` function stores:
+- `zoom_link` - The join URL for students
+- `zoom_meeting_id` - The Zoom meeting ID
+- `notes` - Meeting notes including password
+
+#### 11.2 Registration Storage
+
+**File**: `Backend/models/sessionParticipantRegistrationModel.js`
+
+Registration data is stored in `session_participant_registrations` table:
+- `session_id` - Links to session
+- `user_id` - Links to user (student/tutor)
+- `zoom_meeting_id` - Zoom meeting ID
+- `participant_uuid` - Unique participant identifier
+- `registrant_id` - Zoom registrant ID
+- `email` - Participant email
+- `role` - 'student' or 'tutor'
+- `join_url` - Unique join URL for this participant
+
+### Step 12: Webhook Implementation
+
+Webhooks are already implemented in the codebase.
+
+#### 12.1 Webhook Endpoint
+
+**File**: `Backend/routes/zoomRoutes.js`
+
+```javascript
+POST /api/zoom/webhook
+```
+
+This endpoint:
+- Verifies webhook signature
+- Handles URL validation
+- Processes different event types
+
+#### 12.2 Webhook Handler
+
+**File**: `Backend/controllers/zoomWebhookController.js`
+
+The `handleZoomWebhook()` function processes:
+- `endpoint.url_validation` - Initial webhook verification
+- `meeting.participant_joined` - Participant join events
+- `meeting.participant_left` - Participant leave events
+- `meeting.ended` - Meeting end events
+- `recording.completed` - Recording completion
+- `recording.transcript_completed` - Transcript completion
+
+### Step 13: Implement Join/Leave Functionality
+
+Join and leave tracking is implemented via webhooks.
+
+#### 13.1 Join Event Handler
+
+**File**: `Backend/controllers/zoomWebhookController.js` → `handleParticipantJoined()`
+
+**What it does:**
+1. Receives `meeting.participant_joined` event from Zoom
+2. Identifies participant (student or tutor) by:
+   - Registration UUID lookup
+   - Registrant ID lookup
+   - Email matching
+   - Host ID matching
+3. Updates database:
+   - `session_artifacts.tutor_join_time` (if tutor)
+   - `session_artifacts.student_join_time` (if student)
+   - `session_student_join_times` table (for individual student tracking)
+   - `session_attendance` table
+
+**Database Updates:**
+```sql
+-- Tutor join
+UPDATE session_artifacts 
+SET tutor_join_time = $1, tutor_name = $2 
+WHERE session_id = $3;
+
+-- Student join
+UPDATE session_artifacts 
+SET student_join_time = $1, student_name = $2 
+WHERE session_id = $3;
+
+INSERT INTO session_student_join_times (session_id, student_id, join_time)
+VALUES ($1, $2, $3);
+```
+
+#### 13.2 Leave Event Handler
+
+**File**: `Backend/controllers/zoomWebhookController.js` → `handleParticipantLeft()`
+
+**What it does:**
+1. Receives `meeting.participant_left` event from Zoom
+2. Identifies participant using same methods as join
+3. Updates database:
+   - `session_artifacts.tutor_end_time` (if tutor)
+   - `session_artifacts.student_end_time` (if student)
+   - `session_student_end_times` table
+   - Calculates duration
+
+**Database Updates:**
+```sql
+-- Tutor leave
+UPDATE session_artifacts 
+SET tutor_end_time = $1 
+WHERE session_id = $2;
+
+-- Student leave
+UPDATE session_artifacts 
+SET student_end_time = $1 
+WHERE session_id = $2;
+
+INSERT INTO session_student_end_times (session_id, student_id, end_time)
+VALUES ($1, $2, $3);
+```
+
+### Step 14: Implement Zoom Chats Functionality
+
+Chat functionality is implemented to capture and store chat messages.
+
+#### 14.1 Chat Transcript Retrieval
+
+**File**: `Backend/services/realZoomService.js` → `getMeetingChatTranscript()`
+
+**What it does:**
+1. Gets meeting recordings
+2. Finds chat transcript file (file_type: 'CHAT')
+3. Downloads chat transcript
+4. Returns chat content
+
+#### 14.2 Chat Import Handler
+
+**File**: `Backend/controllers/zoomWebhookController.js` → `importZoomChatTranscript()`
+
+**What it does:**
+1. Fetches chat transcript from Zoom API
+2. Parses chat messages (handles multiple formats)
+3. Identifies sender (tutor vs student)
+4. Stores messages in:
+   - `messages` table (for DM conversations)
+   - `session_artifacts.zoom_chat_log` (for session artifacts)
+
+**Chat Parsing:**
+- Supports tab-separated format: `HH:MM:SS\tName:\tmessage`
+- Supports timestamp formats: `HH:MM:SS Name: message`
+- Supports JSON format
+- Identifies sender by name/email matching
+
+#### 14.3 Chat Storage
+
+**Database Tables:**
+- `messages` - Individual chat messages in DM conversations
+- `session_artifacts.zoom_chat_log` - JSONB field storing:
+  ```json
+  {
+    "messages": [...],
+    "raw_transcript": "...",
+    "transcript_file_name": "...",
+    "transcript_file_url": "...",
+    "imported_at": "...",
+    "imported_count": 10,
+    "parse_success": true
+  }
+  ```
+
+### Step 15: Implement Zoom Recording Functionality
+
+Recording functionality captures and processes meeting recordings.
+
+#### 15.1 Recording Event Handler
+
+**File**: `Backend/controllers/zoomWebhookController.js` → `handleRecordingCompleted()`
+
+**What it does:**
+1. Receives `recording.completed` event from Zoom
+2. Gets recording files from webhook payload
+3. Finds video recording file (prefers MP4, falls back to M4A)
+4. Triggers recording ingestion pipeline
+5. Downloads and processes transcript
+
+#### 15.2 Recording Ingestion Service
+
+**File**: `Backend/services/recordingIngestionService.js` (referenced in webhook)
+
+**What it does:**
+1. Downloads recording from Zoom
+2. Uploads to S3 (AWS)
+3. Generates transcript using OpenAI Whisper (if enabled)
+4. Stores recording URL in `session_artifacts.recording_url`
+5. Updates session status
+
+#### 15.3 Recording Storage
+
+**Database Storage:**
+- `session_artifacts.recording_url` - S3 URL of the recording
+- `session_artifacts.recording_file_name` - Original filename
+- `session_artifacts.recording_file_size` - File size
+- `session_artifacts.recording_duration` - Duration in seconds
+
+### Step 16: Implement Zoom Transcript Text Functionality
+
+Transcript functionality captures and processes meeting transcripts.
+
+#### 16.1 Transcript Download Service
+
+**File**: `Backend/services/realZoomService.js` → `downloadMeetingTranscript()`
+
+**What it does:**
+1. Gets OAuth access token
+2. Fetches meeting recordings
+3. Finds transcript file (file_type: 'TRANSCRIPT' or 'VTT')
+4. Downloads transcript file
+5. Returns transcript content
+
+#### 16.2 Transcript Processing
+
+**File**: `Backend/services/transcriptParserService.js` (referenced in webhook)
+
+**What it does:**
+1. Parses WEBVTT format transcript
+2. Extracts speaker information
+3. Creates structured JSON format:
+   ```json
+   {
+     "messages": [
+       {
+         "speaker": "Speaker 1",
+         "text": "Hello everyone",
+         "timestamp": "00:00:05.000",
+         "start_time": 5.0,
+         "end_time": 7.5
+       }
+     ],
+     "metadata": {
+       "total_messages": 100,
+       "duration": 3600,
+       "format": "webvtt"
+     }
+   }
+   ```
+
+#### 16.3 Transcript Event Handler
+
+**File**: `Backend/controllers/zoomWebhookController.js` → `handleRecordingTranscriptCompleted()`
+
+**What it does:**
+1. Receives `recording.transcript_completed` event
+2. Downloads transcript from Zoom
+3. Processes transcript (WEBVTT → structured JSON)
+4. Stores in `session_artifacts.transcript_text` (JSONB field)
+
+#### 16.4 Transcript Storage
+
+**Database Storage:**
+- `session_artifacts.transcript_text` - JSONB field containing structured transcript
+- `session_artifacts.transcript_file_url` - Original transcript file URL
+- `session_artifacts.transcript_file_name` - Transcript filename
+
+---
+
+## 4. Database Schema
+
+### Required Tables
+
+The following tables are used for Zoom integration:
+
+#### 4.1 Sessions Table
+
+```sql
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS zoom_link TEXT;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS zoom_meeting_id VARCHAR(255);
+```
+
+#### 4.2 Session Artifacts Table
+
+```sql
+CREATE TABLE IF NOT EXISTS session_artifacts (
+  id SERIAL PRIMARY KEY,
+  session_id INTEGER REFERENCES sessions(id),
+  tutor_join_time TIMESTAMP,
+  tutor_end_time TIMESTAMP,
+  student_join_time TIMESTAMP,
+  student_end_time TIMESTAMP,
+  tutor_name VARCHAR(255),
+  student_name VARCHAR(255),
+  recording_url TEXT,
+  recording_file_name VARCHAR(255),
+  recording_file_size BIGINT,
+  recording_duration INTEGER,
+  transcript_text JSONB,
+  transcript_file_url TEXT,
+  transcript_file_name VARCHAR(255),
+  zoom_chat_log JSONB,
+  actual_duration INTEGER,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+#### 4.3 Session Participant Registrations Table
+
+```sql
+CREATE TABLE IF NOT EXISTS session_participant_registrations (
+  id SERIAL PRIMARY KEY,
+  session_id INTEGER REFERENCES sessions(id),
+  user_id INTEGER REFERENCES users(id),
+  zoom_meeting_id VARCHAR(255),
+  participant_uuid VARCHAR(255),
+  registrant_id VARCHAR(255),
+  email VARCHAR(255),
+  role VARCHAR(50), -- 'student' or 'tutor'
+  join_url TEXT,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(session_id, user_id, zoom_meeting_id)
+);
+```
+
+#### 4.4 Session Student Join Times Table
+
+```sql
+CREATE TABLE IF NOT EXISTS session_student_join_times (
+  id SERIAL PRIMARY KEY,
+  session_id INTEGER REFERENCES sessions(id),
+  student_id INTEGER REFERENCES users(id),
+  join_time TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+#### 4.5 Session Student End Times Table
+
+```sql
+CREATE TABLE IF NOT EXISTS session_student_end_times (
+  id SERIAL PRIMARY KEY,
+  session_id INTEGER REFERENCES sessions(id),
+  student_id INTEGER REFERENCES users(id),
+  end_time TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+## 5. Testing & Verification
+
+### Step 17: Test Meeting Creation
+
+1. **Create a test session:**
    ```bash
-   cd Backend
-   npm install  # If you haven't already
-   npm start
+   POST /api/zoom/sessions/:sessionId/meeting
    ```
 
-2. Check the console output - you should see:
-   ```
-   🔧 [ZOOM SERVICE] Using REAL Zoom service
-   ✅ [ZOOM API] Access token obtained
-   ```
+2. **Verify in Zoom:**
+   - Log into Zoom web portal
+   - Check "Meetings" section
+   - Verify meeting was created
 
-### 7.2 Test Meeting Creation
-
-#### Option A: Using API Endpoint
-
-```bash
-# Create a test meeting
-curl -X POST http://localhost:4000/api/zoom/meetings \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '{
-    "topic": "Test Tutoring Session",
-    "start_time": "2024-12-31T10:00:00Z",
-    "duration": 60,
-    "timezone": "UTC"
-  }'
-```
-
-#### Option B: Create Through Session
-
-Create a session through your application's scheduling interface. The Zoom meeting should be automatically created.
-
-### 7.3 Verify Meeting in Zoom
-
-1. Log in to your Zoom account
-2. Go to **"Meetings"** → **"Scheduled"**
-3. You should see the test meeting you just created
-
-### 7.4 Test Webhook Events
-
-1. **Join a Test Meeting**:
-   - Use the join URL from the created meeting
-   - Join as both tutor and student (use different Zoom accounts)
-   - Check your server logs for webhook events:
-     ```
-     Incoming Zoom event: meeting.participant_joined
-     Tutor joined session 123 at 2024-12-31T10:00:00Z
-     ```
-
-2. **End the Meeting**:
-   - End the meeting from Zoom
-   - Check logs for:
-     ```
-     Incoming Zoom event: meeting.ended
-     Meeting ended. Duration: 3600 seconds for session 123
-     ```
-
-3. **Check Database**:
+3. **Verify in database:**
    ```sql
-   SELECT 
-     id, 
-     zoom_link, 
-     zoom_meeting_id,
-     status
-   FROM sessions 
-   WHERE zoom_meeting_id IS NOT NULL;
+   SELECT zoom_link, zoom_meeting_id FROM sessions WHERE id = :sessionId;
    ```
 
-### 7.5 Test Recording (If Enabled)
+### Step 18: Test Registration
 
-1. Start a meeting with recording enabled
-2. Record the meeting in Zoom
-3. End the meeting
-4. Wait for the `recording.completed` webhook
-5. Check that the recording URL is stored in the database
+1. **Check registrations:**
+   ```sql
+   SELECT * FROM session_participant_registrations WHERE session_id = :sessionId;
+   ```
+
+2. **Verify join URLs:**
+   - Each student should have a unique join URL
+   - Tutor should have a registration record
+
+### Step 19: Test Webhook Verification
+
+1. **Zoom will send validation request:**
+   - When you add webhook URL in Zoom dashboard
+   - Check server logs for: "Zoom URL validation event received"
+   - Should return 200 with `plainToken` and `encryptedToken`
+
+2. **Test webhook signature:**
+   - Zoom sends events with signature headers
+   - Verify signature is validated correctly
+   - Check logs for: "Incoming Zoom event: meeting.participant_joined"
+
+### Step 20: Test Join/Leave Tracking
+
+1. **Join meeting as tutor:**
+   - Use tutor's join URL or start URL
+   - Check database:
+     ```sql
+     SELECT tutor_join_time, tutor_name FROM session_artifacts WHERE session_id = :sessionId;
+     ```
+
+2. **Join meeting as student:**
+   - Use student's unique join URL
+   - Check database:
+     ```sql
+     SELECT student_join_time, student_name FROM session_artifacts WHERE session_id = :sessionId;
+     SELECT * FROM session_student_join_times WHERE session_id = :sessionId;
+     ```
+
+3. **Leave meeting:**
+   - Leave as student/tutor
+   - Check database for end times
+   - Verify duration is calculated
+
+### Step 21: Test Recording
+
+1. **Enable recording in meeting:**
+   - Start meeting as host
+   - Click "Record" button
+   - End meeting
+
+2. **Wait for webhook:**
+   - `recording.completed` event should be received
+   - Check logs for: "Recording processing completed"
+
+3. **Verify recording:**
+   ```sql
+   SELECT recording_url, recording_file_name FROM session_artifacts WHERE session_id = :sessionId;
+   ```
+
+4. **Check S3:**
+   - Verify file is uploaded to S3 bucket
+   - Verify file is accessible
+
+### Step 22: Test Transcript
+
+1. **Wait for transcript:**
+   - After recording completes, Zoom generates transcript
+   - `recording.transcript_completed` event should be received
+
+2. **Verify transcript:**
+   ```sql
+   SELECT transcript_text, transcript_file_name FROM session_artifacts WHERE session_id = :sessionId;
+   ```
+
+3. **Check transcript format:**
+   - Should be structured JSON
+   - Should contain messages array
+   - Should have timestamps
+
+### Step 23: Test Chat
+
+1. **Send chat messages in meeting:**
+   - Send messages as tutor
+   - Send messages as student
+
+2. **Wait for chat import:**
+   - Chat is imported when meeting ends
+   - Check logs for: "Chat messages stored in session_artifacts"
+
+3. **Verify chat:**
+   ```sql
+   SELECT zoom_chat_log FROM session_artifacts WHERE session_id = :sessionId;
+   ```
+
+4. **Check messages table:**
+   ```sql
+   SELECT * FROM messages WHERE session_id = :sessionId ORDER BY created_at;
+   ```
 
 ---
 
-## Troubleshooting
-
-### Issue: "Missing required scopes" Error
-
-**Error Message**:
-```
-❌ [ZOOM] Missing required scopes. Add "meeting:write:meeting" scope in Zoom Marketplace.
-```
-
-**Solution**:
-1. Go to your Zoom app dashboard
-2. Navigate to **"Scopes"**
-3. Ensure `meeting:write:meeting` is checked and saved
-4. If the app is not activated, click **"Activate"**
-5. Wait a few minutes for changes to propagate
+## 6. Troubleshooting
 
 ### Issue: Webhooks Not Received
 
-**Symptoms**: No webhook events appearing in logs
+**Symptoms:**
+- No webhook events in logs
+- Join/leave times not tracked
 
-**Solutions**:
-1. **Verify Webhook URL is Public**:
-   - Webhooks won't work with `localhost` or `127.0.0.1`
-   - Use a public URL or a tunneling service like ngrok for testing:
-     ```bash
-     ngrok http 4000
-     # Use the ngrok URL in Zoom webhook configuration
-     ```
+**Solutions:**
+1. **Check webhook URL is publicly accessible:**
+   - Use ngrok for local testing: `ngrok http 4000`
+   - Update webhook URL in Zoom dashboard
 
-2. **Check Webhook Secret Token**:
-   - Ensure `ZOOM_WEBHOOK_SECRET_TOKEN` matches the token in Zoom
-   - Restart your server after changing the token
+2. **Verify webhook secret token:**
+   ```env
+   ZOOM_WEBHOOK_SECRET_TOKEN=your_token_here
+   ```
+   - Must match token in Zoom dashboard
 
-3. **Verify Webhook is Active**:
-   - Go to Zoom app dashboard → **"Webhooks"**
-   - Ensure the webhook subscription is **"Active"**
-   - Check that events are subscribed
+3. **Check firewall/security groups:**
+   - Allow Zoom IP addresses
+   - Check Zoom's IP ranges documentation
 
-4. **Check Firewall/Security Groups**:
-   - Ensure Zoom's IP addresses can reach your server
-   - Zoom webhook IPs: Check [Zoom's documentation](https://developers.zoom.us/docs/api/rest/webhook-reference/#ip-addresses)
+4. **Verify event subscriptions:**
+   - Check Zoom dashboard → Event Subscriptions
+   - Ensure events are subscribed
 
-### Issue: "Failed to authenticate with Zoom API"
+### Issue: Meeting Creation Fails
 
-**Error Message**:
-```
-❌ [ZOOM API] Failed to get access token
-```
+**Symptoms:**
+- Error: "Missing required scopes"
+- Error: "Authentication failed"
 
-**Solutions**:
-1. **Verify Credentials**:
-   - Double-check `ZOOM_ACCOUNT_ID`, `ZOOM_CLIENT_ID`, and `ZOOM_CLIENT_SECRET`
-   - Ensure there are no extra spaces or quotes
+**Solutions:**
+1. **Check OAuth credentials:**
+   ```env
+   ZOOM_ACCOUNT_ID=...
+   ZOOM_CLIENT_ID=...
+   ZOOM_CLIENT_SECRET=...
+   ```
 
-2. **Check Account Status**:
-   - Ensure your Zoom account is active
-   - Verify the account has the necessary permissions
+2. **Verify scopes:**
+   - Go to Zoom dashboard → Scopes
+   - Ensure `meeting:write:meeting` is added and activated
 
-3. **Verify Scopes**:
-   - Ensure required scopes are approved in Zoom Marketplace
+3. **Check app activation:**
+   - App must be activated in Zoom dashboard
+   - Check activation status
 
-### Issue: Meetings Created but Not Appearing
+### Issue: Registration Fails
 
-**Symptoms**: API call succeeds but meeting not visible in Zoom
+**Symptoms:**
+- Error: "Registration requires paid account"
+- Students can't register
 
-**Solutions**:
-1. **Check Meeting Host**:
-   - Meetings are created for the account associated with the OAuth app
-   - Log in to that Zoom account to see meetings
+**Solutions:**
+1. **Check Zoom account type:**
+   - Free accounts don't support API registration
+   - Upgrade to Pro, Business, or Enterprise
 
-2. **Verify Meeting Settings**:
-   - Check that meetings aren't being created as private
-   - Verify timezone settings
+2. **Disable registration (if needed):**
+   ```env
+   USE_ZOOM_REGISTRATION=false
+   ```
+   - Students can still join via generic link
+
+3. **Verify registration scopes:**
+   - `meeting:write:registrant` must be added
+   - `meeting:read:registrant` must be added
 
 ### Issue: Recordings Not Downloading
 
-**Error Message**:
-```
-No recording file found for meeting
-```
+**Symptoms:**
+- Recording webhook received but no file
+- Error: "No recording file found"
 
-**Solutions**:
-1. **Enable Cloud Recording**:
-   - Ensure cloud recording is enabled in your Zoom account settings
-   - Check account-level recording permissions
+**Solutions:**
+1. **Check recording scopes:**
+   - `recording:read:recording` must be added
+   - `recording:read:recording:admin` must be added
 
-2. **Verify Recording Scope**:
-   - Ensure `cloud_recording:read:recording:admin` scope is approved
+2. **Verify AWS credentials:**
+   ```env
+   AWS_ACCESS_KEY_ID=...
+   AWS_SECRET_ACCESS_KEY=...
+   AWS_REGION=...
+   AWS_S3_BUCKET=...
+   ```
 
-3. **Check Recording Settings**:
-   - Verify recordings are set to be saved to cloud (not local)
-   - Check that recording started successfully
+3. **Check S3 bucket permissions:**
+   - Bucket must allow uploads
+   - IAM user must have write permissions
 
-### Issue: Chat Transcript Not Importing
+### Issue: Transcript Not Generated
 
-**Symptoms**: Chat messages not appearing in application
+**Symptoms:**
+- Recording completed but no transcript
+- Error: "No transcript available"
 
-**Solutions**:
-1. **Enable Chat Recording**:
-   - Ensure chat recording is enabled in meeting settings
-   - Check Zoom account settings for chat recording
+**Solutions:**
+1. **Enable transcription in Zoom:**
+   - Meeting settings → Recording → Audio transcript
+   - Must be enabled before meeting starts
 
-2. **Verify Scope**:
-   - Ensure `meeting:read:chat_message:admin` scope is approved
+2. **Check transcript scopes:**
+   - Same as recording scopes
+   - Verify scopes are activated
 
-3. **Check Transcript Format**:
-   - Zoom chat transcript format may vary
-   - Check logs for parsing errors
+3. **Wait for processing:**
+   - Transcript generation takes time
+   - Check for `recording.transcript_completed` event
+
+### Issue: Chat Not Imported
+
+**Symptoms:**
+- Meeting ended but no chat messages
+- Chat log is empty
+
+**Solutions:**
+1. **Check chat recording:**
+   - Meeting must have chat recording enabled
+   - Check Zoom meeting settings
+
+2. **Verify chat scopes:**
+   - `meeting:read:chat_message` (optional but recommended)
+
+3. **Check chat file:**
+   - Zoom must generate chat file
+   - Check recording files for CHAT type
+
+### Issue: Participant Identification Fails
+
+**Symptoms:**
+- Join/leave events received but participant not identified
+- Logs show: "Unknown participant joined"
+
+**Solutions:**
+1. **Check registration:**
+   - Participants should be registered before joining
+   - Verify `session_participant_registrations` table
+
+2. **Verify email matching:**
+   - Participant email must match user email in database
+   - Check `users.email` matches Zoom participant email
+
+3. **Check registration UUID:**
+   - Webhook uses `participant_uuid` to identify
+   - Verify UUID is stored in registration table
 
 ---
 
-## API Endpoints Reference
+## Additional Steps & Best Practices
 
-### Meeting Management
+### Step 24: Monitor Webhook Events
 
-#### Create Meeting
+Set up logging to monitor all webhook events:
+
+```javascript
+// In zoomWebhookController.js
+console.log('Incoming Zoom event:', event.event);
+console.log('Event payload:', JSON.stringify(event.payload, null, 2));
 ```
-POST /api/zoom/meetings
-Authorization: Bearer {token}
-Content-Type: application/json
 
-Body:
-{
-  "topic": "Meeting Topic",
-  "start_time": "2024-12-31T10:00:00Z",
-  "duration": 60,
-  "timezone": "UTC",
-  "agenda": "Meeting agenda"
+### Step 25: Error Handling
+
+Ensure all webhook handlers have proper error handling:
+
+```javascript
+try {
+  await handleParticipantJoined(event);
+} catch (error) {
+  console.error('Error handling participant_joined:', error);
+  // Don't throw - return 200 so Zoom doesn't retry
 }
 ```
 
-#### Get Meeting Details
-```
-GET /api/zoom/meetings/:meetingId
-Authorization: Bearer {token}
+### Step 26: Rate Limiting
+
+Zoom API has rate limits. Implement rate limiting if creating many meetings:
+
+```javascript
+// Add delay between requests
+await new Promise(resolve => setTimeout(resolve, 100));
 ```
 
-#### Update Meeting
-```
-PATCH /api/zoom/meetings/:meetingId
-Authorization: Bearer {token}
-Content-Type: application/json
+### Step 27: Security Best Practices
 
-Body:
+1. **Never expose secrets:**
+   - Keep all Zoom credentials in environment variables
+   - Never commit `.env` file to git
+
+2. **Verify webhook signatures:**
+   - Always verify webhook signatures
+   - Reject unsigned requests
+
+3. **Use HTTPS:**
+   - Webhook URLs must use HTTPS
+   - Use SSL certificates
+
+### Step 28: Database Indexing
+
+Add indexes for better performance:
+
+```sql
+CREATE INDEX IF NOT EXISTS idx_sessions_zoom_meeting_id ON sessions(zoom_meeting_id);
+CREATE INDEX IF NOT EXISTS idx_registrations_participant_uuid ON session_participant_registrations(participant_uuid);
+CREATE INDEX IF NOT EXISTS idx_registrations_registrant_id ON session_participant_registrations(registrant_id);
+CREATE INDEX IF NOT EXISTS idx_artifacts_session_id ON session_artifacts(session_id);
+```
+
+---
+
+## Summary Checklist
+
+### Zoom Marketplace Dashboard ✅
+- [ ] Signed in to Zoom Marketplace
+- [ ] Created Server-to-Server OAuth app
+- [ ] Copied Account ID, Client ID, Client Secret
+- [ ] Added required scopes
+- [ ] Configured webhook URL
+- [ ] Generated webhook secret token
+- [ ] Activated app
+
+### Environment Variables ✅
+- [ ] Added ZOOM_ACCOUNT_ID
+- [ ] Added ZOOM_CLIENT_ID
+- [ ] Added ZOOM_CLIENT_SECRET
+- [ ] Added ZOOM_WEBHOOK_SECRET_TOKEN
+- [ ] Configured USE_ZOOM_REGISTRATION (optional)
+- [ ] Restarted server
+
+### Code Implementation ✅
+- [ ] Meeting creation works
+- [ ] Registration process works
+- [ ] Meeting links stored in database
+- [ ] Webhook endpoint configured
+- [ ] Join/leave tracking works
+- [ ] Chat import works
+- [ ] Recording download works
+- [ ] Transcript processing works
+
+### Testing ✅
+- [ ] Tested meeting creation
+- [ ] Tested participant registration
+- [ ] Tested webhook verification
+- [ ] Tested join/leave tracking
+- [ ] Tested recording download
+- [ ] Tested transcript generation
+- [ ] Tested chat import
+
+### Production Deployment ✅
+- [ ] Webhook URL is publicly accessible
+- [ ] SSL certificate configured
+- [ ] Environment variables set in production
+- [ ] Database migrations run
+- [ ] Monitoring/logging configured
+
+---
+
+## API Reference Examples
+
+### Example 1: Get OAuth Access Token
+
+This curl command demonstrates how to obtain an OAuth access token using Server-to-Server OAuth:
+
+```bash
+curl --location --request POST 'https://zoom.us/oauth/token?grant_type=account_credentials&account_id=06ZPcuahRVqp7ccvwZesZQ' \
+--header 'Authorization: Basic WG10SUxBQV9TamVQUWpGdW0zMjhVdzpBdzFLcjdDT0Uwa2pKZDQ0R0dMOHh3N2FRT3lVRVlIVQ==' \
+--header 'Content-Type: application/json' \
+--header 'Cookie: _zm_currency=INR; _zm_lang=en-US; _zm_mtk_guid=5ba7626f7c4048569abba58c72e8ea21; _zm_visitor_guid=d549f5a1af18487f9e4fa0ea3dc3d214'
+```
+
+**Notes:**
+- Replace `account_id` with your `ZOOM_ACCOUNT_ID`
+- The `Authorization: Basic` header contains base64-encoded `CLIENT_ID:CLIENT_SECRET`
+- Response will contain `access_token` and `expires_in` fields
+- Token is valid for 1 hour
+
+**Expected Response:**
+```json
 {
-  "topic": "Updated Topic",
-  "start_time": "2024-12-31T11:00:00Z"
+  "access_token": "eyJzdiI6IjAwMDAwMiIsImFsZyI6IkhTNTEyIiwidiI6IjIuMCIs...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "scope": "meeting:write:meeting meeting:read:meeting ..."
 }
 ```
 
-#### Delete Meeting
-```
-DELETE /api/zoom/meetings/:meetingId
-Authorization: Bearer {token}
+### Example 2: Get Meeting Recordings
+
+This curl command demonstrates how to retrieve recordings for a specific meeting:
+
+```bash
+curl --location 'https://api.zoom.us/v2/meetings/83933845921/recordings' \
+--header 'Authorization: Bearer eyJzdiI6IjAwMDAwMiIsImFsZyI6IkhTNTEyIiwidiI6IjIuMCIsImtpZCI6IjFmNjBlMTBjLWIyZWItNGIzMC1hNjBiLWQ0MzNiMmNlZmZjZiJ9.eyJhdWQiOiJodHRwczovL29hdXRoLnpvb20udXMiLCJ1aWQiOiJteEgtTnh2T1JxU0tqYURPTU1DTUtRIiwidmVyIjoxMCwiYXVpZCI6ImQ4OTRjMWJkN2JkNjViNDA2M2RhNmZhN2ZlMmFhYzQwMWU0ODZhNDRjMjkxOWYwNThlZjllM2EwMThmMjMzY2YiLCJuYmYiOjE3NjUyODY5ODEsImNvZGUiOiI4S29pUGVOZ1JZbUNCNVdEV1NSLWJnUVppWjRSSDdUbVEiLCJpc3MiOiJ6bTpjaWQ6WG10SUxBQV9TamVQUWpGdW0zMjhVdyIsImdubyI6MCwiZXhwIjoxNzY1MjkwNTgxLCJ0eXBlIjozLCJpYXQiOjE3NjUyODY5ODEsImFpZCI6IjA2WlBjdWFoUlZxcDdjY3Z3WmVzWlEifQ.ZEEU2swF_9v4j0OeEVl-dDqk4JAbKooPW1koDPimSkuI9_RwPzGPt_u5u1xFdRqzsSBkM6lWYaZucC7Bg6MK7w' \
+--header 'Content-Type: application/json' \
+--header 'Cookie: _zm_currency=INR; _zm_lang=en-US; _zm_mtk_guid=5ba7626f7c4048569abba58c72e8ea21; _zm_visitor_guid=d549f5a1af18487f9e4fa0ea3dc3d214'
 ```
 
-### Session Integration
+**Notes:**
+- Replace `83933845921` with your actual meeting ID
+- Replace the Bearer token with a fresh access token from Example 1
+- Requires `recording:read:recording` scope
 
-#### Create Meeting for Session
-```
-POST /api/zoom/sessions/:sessionId/meeting
-Authorization: Bearer {token}
-```
-
-#### Batch Create Meetings
-```
-POST /api/zoom/sessions/batch-meetings
-Authorization: Bearer {token}
-Content-Type: application/json
-
-Body:
+**Expected Response:**
+```json
 {
-  "sessionIds": [1, 2, 3]
+  "account_id": "06ZPcuahRVqp7ccvwZesZQ",
+  "meeting_id": "83933845921",
+  "recording_start": "2025-01-15T10:00:00Z",
+  "recording_end": "2025-01-15T11:00:00Z",
+  "recording_files": [
+    {
+      "id": "abc123",
+      "meeting_id": "83933845921",
+      "recording_start": "2025-01-15T10:00:00Z",
+      "recording_end": "2025-01-15T11:00:00Z",
+      "file_type": "MP4",
+      "file_size": 15728640,
+      "play_url": "https://...",
+      "download_url": "https://us06web.zoom.us/rec/download/...",
+      "status": "completed"
+    },
+    {
+      "id": "def456",
+      "file_type": "TRANSCRIPT",
+      "file_name": "transcript.vtt",
+      "download_url": "https://us06web.zoom.us/rec/download/...",
+      "status": "completed"
+    }
+  ]
 }
 ```
 
-#### Get Session Artifacts
-```
-GET /api/zoom/sessions/:sessionId/artifacts
-Authorization: Bearer {token}
+### Example 3: Download Transcript File
+
+This curl command demonstrates how to download a transcript file (closed captions) from a recording:
+
+```bash
+curl --location 'https://us06web.zoom.us/rec/download/m3B2j8yyikZjtxWShShgAbDTGE5_3cKk3VutHGkcKG0BjKxxyyWh1kBQCasatToN__ariZAizzuOhsA_.23nFOzlQJNVYk2qE?type=cc' \
+--header 'Authorization: Bearer eyJzdiI6IjAwMDAwMiIsImFsZyI6IkhTNTEyIiwidiI6IjIuMCIsImtpZCI6IjFmNjBlMTBjLWIyZWItNGIzMC1hNjBiLWQ0MzNiMmNlZmZjZiJ9.eyJhdWQiOiJodHRwczovL29hdXRoLnpvb20udXMiLCJ1aWQiOiJteEgtTnh2T1JxU0tqYURPTU1DTUtRIiwidmVyIjoxMCwiYXVpZCI6ImQ4OTRjMWJkN2JkNjViNDA2M2RhNmZhN2ZlMmFhYzQwMWU0ODZhNDRjMjkxOWYwNThlZjllM2EwMThmMjMzY2YiLCJuYmYiOjE3NjUyODY5ODEsImNvZGUiOiI4S29pUGVOZ1JZbUNCNVdEV1NSLWJnUVppWjRSSDdUbVEiLCJpc3MiOiJ6bTpjaWQ6WG10SUxBQV9TamVQUWpGdW0zMjhVdyIsImdubyI6MCwiZXhwIjoxNzY1MjkwNTgxLCJ0eXBlIjozLCJpYXQiOjE3NjUyODY5ODEsImFpZCI6IjA2WlBjdWFoUlZxcDdjY3Z3WmVzWlEifQ.ZEEU2swF_9v4j0OeEVl-dDqk4JAbKooPW1koDPimSkuI9_RwPzGPt_u5u1xFdRqzsSBkM6lWYaZucC7Bg6MK7w' \
+--header 'Cookie: _zm_currency=INR; _zm_lang=en-US; _zm_mtk_guid=5ba7626f7c4048569abba58c72e8ea21; _zm_visitor_guid=d549f5a1af18487f9e4fa0ea3dc3d214'
 ```
 
-### Webhook Endpoints
+**Notes:**
+- Replace the download URL with the actual `download_url` from the recording files response
+- The `?type=cc` parameter specifies closed captions (transcript)
+- Replace the Bearer token with a fresh access token
+- The response will be the transcript file content (usually WEBVTT format)
 
-#### Webhook Handler (Zoom calls this)
+**Expected Response (WEBVTT format):**
 ```
-POST /api/zoom/webhook
-Content-Type: application/json
-X-Zm-Signature: {signature}
-X-Zm-Request-Timestamp: {timestamp}
+WEBVTT
+
+00:00:05.000 --> 00:00:07.500
+Hello everyone, welcome to today's session.
+
+00:00:08.000 --> 00:00:12.300
+Today we'll be discussing advanced topics.
+
+00:00:13.000 --> 00:00:16.800
+Let's start with the first topic.
 ```
 
-#### Webhook Verification
-```
-GET /api/zoom/webhook/verify?plainToken={token}
-```
+**Usage in Code:**
+
+These curl commands correspond to the following code implementations:
+
+1. **OAuth Token** → `Backend/services/realZoomService.js` → `getAccessToken()`
+2. **Get Recordings** → `Backend/services/realZoomService.js` → `getMeetingRecordings()`
+3. **Download Transcript** → `Backend/services/realZoomService.js` → `downloadMeetingTranscript()`
 
 ---
 
-## Additional Resources
+## Support & Resources
 
-### Zoom API Documentation
-- [Zoom API Reference](https://developers.zoom.us/docs/api/rest/)
-- [Server-to-Server OAuth](https://developers.zoom.us/docs/api/rest/using-zoom-apis/#server-to-server-oauth)
-- [Webhook Events](https://developers.zoom.us/docs/api/rest/webhook-reference/)
-
-### Project Files Reference
-- Main Zoom Service: `Backend/services/zoomService.js`
-- Real Zoom Service: `Backend/services/realZoomService.js`
-- Mock Zoom Service: `Backend/services/mockZoomService.js`
-- Webhook Controller: `Backend/controllers/zoomWebhookController.js`
-- Zoom Routes: `Backend/routes/zoomRoutes.js`
-
-### Support
-- Zoom Developer Support: [Zoom Developer Forum](https://devforum.zoom.us/)
-- Zoom API Status: [Zoom Status Page](https://status.zoom.us/)
+- **Zoom API Documentation**: https://marketplace.zoom.us/docs/api-reference/zoom-api
+- **Zoom Webhook Guide**: https://marketplace.zoom.us/docs/api-reference/webhook-reference
+- **Zoom Scopes Reference**: https://marketplace.zoom.us/docs/api-reference/zoom-api/scopes
 
 ---
 
-## Quick Checklist
-
-Use this checklist to ensure everything is set up correctly:
-
-- [ ] Zoom app created in Zoom Marketplace
-- [ ] Server-to-Server OAuth app type selected
-- [ ] Required scopes added and approved
-- [ ] Account ID, Client ID, and Client Secret copied
-- [ ] Webhook URL configured in Zoom
-- [ ] Webhook events subscribed
-- [ ] Webhook secret token generated and configured
-- [ ] Environment variables added to `.env` file
-- [ ] Server restarted after environment variable changes
-- [ ] Test meeting created successfully
-- [ ] Webhook events received and logged
-- [ ] Database columns verified
-- [ ] Recording functionality tested (if applicable)
-
----
-
-## Notes
-
-- **Development Mode**: Set `USE_MOCK_ZOOM=true` to use mock Zoom service for development without API calls
-- **Rate Limits**: Zoom API has rate limits. The code includes delays in batch operations to avoid hitting limits
-- **Token Expiration**: OAuth tokens are automatically refreshed. The service handles token expiration internally
-- **Error Handling**: The system falls back to placeholder meetings if Zoom API fails, ensuring sessions can still be created
-
----
-
-**Last Updated**: December 2024
+**Last Updated**: 2025-01-XX
 **Version**: 1.0
 
